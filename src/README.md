@@ -1,6 +1,6 @@
 # 3D Destruction Reconstruction
 
-Destruction of 3D models into fragments.
+Destruction of 3D models into fragments. [Test Pottery Download](https://drive.google.com/file/d/1B1qDF82Va_aGWw5gxO1H_afQ3ONYufqd/view?usp=sharing) unzip into the project root.
 
 ## SETUP
 
