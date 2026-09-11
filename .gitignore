@@ -1,6 +1,7 @@
 archive
 output*
 pottery
+fragment
 .vscode
 
 # Python ENV
