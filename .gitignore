@@ -3,6 +3,7 @@ output*
 pottery
 fragment
 .vscode
+__pycache__
 
 # Python ENV
 descon
