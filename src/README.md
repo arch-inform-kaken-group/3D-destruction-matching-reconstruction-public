@@ -29,5 +29,5 @@ Destruction of 3D models into fragments. [Test Pottery Download](https://drive.g
 ## USAGE
 
 ```bash
-python ./src/destruction.py ./pottery --pieces 30 --randomness 0.5 --smoothness 0.9
+
 ```
