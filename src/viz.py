@@ -608,7 +608,7 @@ def viz_08_fill(segs, nv, mid, u, v, spacing, diag, outdir):
                    cmap="gray_r",
                    origin="lower",
                    interpolation="nearest")
-    axes[0].set_title("Stage 8A: Bounding Envelope of Kept Segments",
+    axes[0].set_title("Stage 8A: Bounding Envelope of Segments",
                       fontsize=16,
                       fontweight="bold")
 
@@ -617,7 +617,6 @@ def viz_08_fill(segs, nv, mid, u, v, spacing, diag, outdir):
     overlay[fill] = [0.2, 0.6, 1.0, 0.85]
     axes[1].imshow(overlay, origin="lower", interpolation="nearest")
     axes[1].set_title(
-        # f"Stage 8B: Rasterized Solid Fill Mask ({int(fill.sum())} px)",
         f"Stage 8B: Rasterized Solid Fill Mask",
         fontsize=16,
         fontweight="bold")
