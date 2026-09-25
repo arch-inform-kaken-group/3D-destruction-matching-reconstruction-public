@@ -104,11 +104,12 @@ class JomonDataModule(L.LightningDataModule):
         skip_fill: bool = False,
         min_fragments: int = 3,
         # GARF sampling settings
-        mesh_sample_strategy: str = "poisson",   # "poisson" | "uniform" | "wpd"
+        mesh_sample_strategy: str = "poisson",   # "poisson" | "fps" | "wpd"
         wpd_detail_ratio: float = 0.30,
         wpd_curv_thresh: float = 0.5,
         include_fill: bool = True,
         fill_ratio: float = 0.15,
+        fps_oversample: int = 12,
         **kwargs,
     ):
         super().__init__()
@@ -138,6 +139,7 @@ class JomonDataModule(L.LightningDataModule):
             wpd_curv_thresh=p.wpd_curv_thresh,
             include_fill=p.include_fill,
             fill_ratio=p.fill_ratio,
+            fps_oversample=p.fps_oversample,
         )
 
     def _save_sample_visuals(self, dataset, out_dir, n_samples=3):

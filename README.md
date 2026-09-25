@@ -1,14 +1,30 @@
 # Jomon Pottery Reassembly with GARF (LoRA Fine-Tuning)
 
-Fragment 85 Jomon pots, LoRA fine-tune **GARF** on an RTX4070Ti (16GB VRAM),
+Fragment 85 Jomon pots, LoRA fine-tune [**GARF**](https://arxiv.org/abs/2504.05400) on an RTX4070Ti (16GB VRAM),
 run inference on 10 held-out pots, and render reconstruction videos.
 
-## 📸 Visuals & Media
+## Visuals & Metrics
 
-9 of the held out potteries.
+**9 of the held out potteries.**
+
+| Sampling Method </br> $\text{ }$ | RMSE(Rotation) $\downarrow$ </br> degree | RMSE(Translation) $\downarrow$ </br> $×10^{−2}$ | PA $\uparrow$ </br> % | Chamfer Distance $\downarrow$ </br> $×10^{−3}$ |
+| :-- | :-- | :-- | :-- | :-- |
+| Uniform | - | - | - | - |
+| Poisson Disk | **3.33** | **1.46** | **1.000** | **0.58** |
+| Weighted Poisson Disk | 5.25 | 2.11 | 0.988 | 0.78 |
+
+*PA is the percentage of correctly assembled fragments, where the per-fragment chamfer distance is below 0.01*
+
+### Poisson Disk Sampling
 
 <p align="center">
-  <img src="media/collage_3x3.gif" alt="3x3 collage of Jomon pottery reassembly animations" width="72%" />
+  <img src="media/poisson/collage_3x3.gif" alt="3x3 collage of Jomon pottery reassembly animations" width="72%" />
+</p>
+
+### Weighted Poisson Disk Sampling
+
+<p align="center">
+  <img src="media/wpd/collage_3x3.gif" alt="3x3 collage of Jomon pottery reassembly animations" width="72%" />
 </p>
 
 **Pipeline & architecture diagrams:**
@@ -18,14 +34,15 @@ run inference on 10 held-out pots, and render reconstruction videos.
   <img src="media/garf_model_architecture.png" alt="GARF Model Architecture" width="48%" />
 </p>
 
-<details>
-<summary>Individual reassembly videos</summary>
+**Individual reassembly videos for poisson disk sampling**
+
 <p align="center">
-  <video src="media/animation_UD0016.mp4" width="32%" controls></video>
-  <video src="media/animation_UD0023.mp4" width="32%" controls></video>
-  <video src="media/animation_UD0302.mp4" width="32%" controls></video>
+  <video src="media/poisson/UD0322(82).mp4" width="32%" controls></video>
+  <video src="media/poisson/UD0411(83).mp4" width="32%" controls></video>
+  <video src="media/poisson/UK0001(85).mp4" width="32%" controls></video>
 </p>
-</details>
+
+# Usage
 
 ## 1. RTX4070Ti Environment (GARF-recommended: `uv`)
 

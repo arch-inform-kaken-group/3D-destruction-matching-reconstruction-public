@@ -355,9 +355,10 @@ class JomonDataset(Dataset):
         skip_fill: bool = False,
         min_fragments: int = 3,                # hard lower bound on fragments
         # GARF sampling settings
-        mesh_sample_strategy: str = "poisson",   # "uniform" | "poisson" | "wpd"
+        mesh_sample_strategy: str = "poisson",   # "fps" | "poisson" | "wpd"
         include_fill: bool = True,
         fill_ratio: float = 0.15,
+        fps_oversample: int = 12,   # candidate-pool multiplier for FPS
         test_base_seed: int = 12345,
         wpd_detail_ratio: float = 0.30,
         wpd_curv_thresh: float = 0.5,
@@ -379,6 +380,7 @@ class JomonDataset(Dataset):
         self.wpd_curv_thresh = wpd_curv_thresh
         self.include_fill = include_fill
         self.fill_ratio = fill_ratio
+        self.fps_oversample = fps_oversample
         self.test_base_seed = test_base_seed
         self._n_items = 0
 
@@ -529,11 +531,8 @@ class JomonDataset(Dataset):
                 pts, nms = self._sample_shell_wpd(shell, shell_count, seed)
             elif self.mesh_sample_strategy == "poisson":
                 pts, nms = self._even_sample(shell, shell_count, seed)
-            else:  # "uniform"
-                sp, fidx = trimesh.sample.sample_surface(
-                    shell, int(shell_count), seed=seed)
-                pts = sp.astype(np.float64)
-                nms = shell.face_normals[fidx].astype(np.float64)
+            else:  # "fps"
+                pts, nms = self._sample_shell_fps(shell, shell_count, seed, rng)
         elif shell_count > 0 and len(shell.vertices) > 0:
             sel = rng.choice(len(shell.vertices), int(shell_count),
                              replace=(shell_count > len(shell.vertices)))
@@ -552,6 +551,36 @@ class JomonDataset(Dataset):
                 nms = np.vstack([nms, fn_sel]) if len(nms) else fn_sel
         return pts, nms
 
+    # ------------------------------------------------------- FPS helpers
+    @staticmethod
+    def _fps(points: np.ndarray, n: int, rng: np.random.Generator) -> np.ndarray:
+        """Greedy farthest-point sampling (max-min-distance selection)."""
+        N = len(points)
+        n = int(n)
+        if n <= 0 or N == 0:
+            return np.zeros(0, dtype=np.int64)
+        if n >= N:
+            return np.arange(N, dtype=np.int64)
+        sel = np.empty(n, dtype=np.int64)
+        sel[0] = int(rng.integers(N))
+        d2 = ((points - points[sel[0]]) ** 2).sum(1)
+        for i in range(1, n):
+            j = int(np.argmax(d2))
+            sel[i] = j
+            np.minimum(d2, ((points - points[j]) ** 2).sum(1), out=d2)
+        return sel
+
+    def _sample_shell_fps(self, shell, count, seed, rng):
+        """FPS over an area-weighted candidate pool: density follows surface
+        area (pool), spacing is even (FPS), normals stay exact face normals."""
+        count = int(count)
+        pool = max(count, min(len(shell.faces) * 3, count * self.fps_oversample))
+        sp, fidx = trimesh.sample.sample_surface(shell, pool, seed=seed)
+        keep = self._fps(sp, count, rng)
+        return (sp[keep].astype(np.float64),
+                shell.face_normals[fidx[keep]].astype(np.float64))
+
+    # poisson
     def _even_sample(self, mesh, count, seed):
         """Poisson-disk (blue noise) + uniform padding to exact count."""
         if count <= 0 or len(mesh.faces) == 0:
@@ -587,6 +616,7 @@ class JomonDataset(Dataset):
             pass
         return feat
 
+    # weighted poisson
     def _sample_shell_wpd(self, shell, count, seed):
         """Weighted Poisson-disk: base blue noise + denser blue noise on features."""
         if count <= 0 or len(shell.faces) == 0:

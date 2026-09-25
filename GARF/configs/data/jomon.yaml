@@ -16,7 +16,7 @@ destruct_grid_res: 40
 destruct_jacobi_iters: 60
 skip_fill: false
 min_fragments: 3
-mesh_sample_strategy: poisson    # uniform | poisson | wpd
+mesh_sample_strategy: poisson    # fps | poisson | wpd
 wpd_detail_ratio: 0.30
 wpd_curv_thresh: 0.5             # 1.0 = rims only (cheapest wpd)
 include_fill: true
