@@ -1,0 +1,13 @@
+# @package _global_
+
+defaults:
+  - override /model: frac_seg
+
+experiment_name: pretraining_frac_seg
+tags: ["hpc", "pretraining"]
+
+trainer:
+  max_epochs: 500
+
+data:
+  batch_size: 64

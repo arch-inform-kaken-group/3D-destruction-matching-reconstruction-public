@@ -100,6 +100,7 @@ CORE = np.array([0.62,
                  0.28])  # Warmer reduced core (rich terracotta, no grey)
 LUM = np.array([0.2126, 0.7152, 0.0722])
 
+QUIET = False
 
 @dataclass
 class PointCloud:
@@ -127,7 +128,8 @@ class Fragment:
 
 
 def log(m):
-    print(f"[{time.strftime('%H:%M:%S')}] {m}", flush=True)
+    if not QUIET:
+        print(f"[{time.strftime('%H:%M:%S')}] {m}", flush=True)
 
 
 def rng_from_seed(s):
@@ -1715,6 +1717,225 @@ def build_parser():
     g.add_argument("--seed", type=int, default=42)
     return p
 
+# ============================================================
+# In-memory fragmentation for on-the-fly training data
+# ============================================================
+def fast_destruct_args(num_fragments=8, num_samples=20_000, **overrides):
+    """Reduced-resolution settings for fast on-the-fly training data."""
+    base = dict(
+        num_samples=num_samples,      # only for labeling/fill spacing, NOT saved
+        fill_color=CLAY.tolist(),
+        stress_model="fem_lite",      # use "curvature" for ~3x faster (less realistic)
+        grid_res=40,                  # down from 64
+        jacobi_iters=60,              # down from 150
+        impact_dir=[1.0, 0.0, 0.35],
+        w_vol=1.0, w_curv=0.6, w_thin=0.8,
+        thickness_alpha=1.5, thickness_cap=5.0,
+        noise_sigma=0.5, noise_freqs=48, noise_length_factor=0.33,
+        seed_radius_sigma=0.35, seed_score_noise=0.05,
+        rim_weight=0.6, rim_length_scale=0.08,
+        curv_bias_weight=0.4, thin_bias_weight=0.5,
+        size_sigma=0.6, power_weight_scale=0.15,
+        height_amp_scale=0.18, height_H=0.78, height_octaves=5,
+        grain_amp_scale=0.03, height_fade_fraction=0.35,
+        chip_prob=0.15, chip_width_scale=1.5,
+        fill_color_model="depth_core",
+        surface_color=CLAY.tolist(), core_color=CORE.tolist(),
+        fragments=num_fragments,
+        explode_distance=None, explode_scale=0.12,
+        min_faces=50,
+        skip_fill=False,              # set True to skip fracture fill (fastest)
+        fill_max_points=20_000,       # cap fill points per pair
+        min_fragments=3,
+    )
+    base.update(overrides)
+    return argparse.Namespace(**base)
+
+
+def generate_fragments_in_memory(mesh, args, seed):
+    """Core fragmentation, in-memory, training-oriented (no I/O, no palette).
+
+    Returns dict with:
+      shells:    list[trimesh.Trimesh]  assembled fragment shells
+      areas:     list[float]
+      centroids: list[np.ndarray]
+      fill:      {frag_idx: [(pts, cols), ...]}
+      edges:     list[(frag_i, frag_j)]  connectivity by fragment index
+      num_fragments: int
+    """
+    rng = rng_from_seed(seed)
+    colors = np.full((len(mesh.vertices), 3), DEFAULT_GRAY)
+    center = mesh.bounds.mean(0)
+    diag = bbox_diagonal(mesh)
+
+    pc_pts, pc_cols, _fi = sample_surface_points_colors(mesh, colors, args.num_samples, rng)
+    area = float(mesh.area)
+    spacing = float(np.sqrt(area / max(len(pc_pts), 1))) if area > 1e-18 else diag / 1000.0
+
+    # stress + seeds
+    bundle = compute_stress(mesh, args, diag)
+    s_hat, thick, t_ref, curv = bundle["s_hat"], bundle["thick"], bundle["t_ref"], bundle["curv"]
+    P = mesh.triangles_center
+    score = s_hat.copy()
+    if thick is not None and t_ref:
+        score = score * thickness_gain(thick, t_ref, args.thickness_alpha, args.thickness_cap)
+    noise_rng = rng_child(int(seed), 101)
+    if args.noise_sigma > 0:
+        base_shard = diag / max(args.fragments, 2) ** (1.0 / 3.0)
+        noise = bandlimited_noise(P, noise_rng, base_shard * args.noise_length_factor,
+                                  n_freq=args.noise_freqs)
+        score = score * np.exp(args.noise_sigma * noise)
+
+    e = np.sort(np.asarray(mesh.edges), axis=1)
+    uniq_e, cnt_e = np.unique(e, axis=0, return_counts=True)
+    rim_pts = np.asarray(mesh.vertices)[uniq_e[cnt_e == 1]].mean(1) if (cnt_e == 1).any() else None
+    if rim_pts is not None and len(rim_pts):
+        d_rim = cKDTree(rim_pts).query(P)[0]
+        rim_bias = 1.0 + args.rim_weight * np.exp(-d_rim / max(1e-9, args.rim_length_scale * diag))
+    else:
+        rim_bias = np.ones(len(P))
+    curv_bias = 1.0 + args.curv_bias_weight * curv
+    if thick is not None:
+        t_floor = max(float(np.quantile(thick[thick > 0], 0.05)), 1e-6)
+        thin_bias = 1.0 + args.thin_bias_weight * norm01(1.0 / np.clip(thick, t_floor, None))
+    else:
+        thin_bias = np.ones(len(P))
+    score = norm01(score * rim_bias * curv_bias * thin_bias)
+
+    # --- stochastic seeds (v10), with a minimum-fragment guarantee ---
+    min_frags = int(getattr(args, "min_fragments", 3))
+    base_radius = diag / (2.2 * max(args.fragments, 2) ** (1 / 3))
+    radius = base_radius
+    sidx = np.asarray([], dtype=int)
+    for attempt in range(6):
+        sidx = nms_maxima(score, P, radius, args.fragments, rng=rng,
+                          radius_sigma=args.seed_radius_sigma,
+                          score_noise=args.seed_score_noise)
+        if len(sidx) >= min_frags:
+            break
+        radius *= 0.7
+    if len(sidx) < min_frags:
+        # last resort: tiny radius -> NMS degenerates to top-k scores,
+        # which always yields min(args.fragments, len(P)) seeds
+        sidx = nms_maxima(score, P, base_radius * 1e-3, args.fragments, rng=None)
+    seeds = P[sidx]
+    nS = len(seeds)
+    if nS < min_frags:
+        return None
+    tree_seeds = cKDTree(seeds)
+
+    if args.size_sigma > 0 and nS > 1:
+        base_spacing = diag / max(args.fragments, 2) ** (1.0 / 3.0)
+        factors = rng_child(int(seed), 202).lognormal(0.0, args.size_sigma, nS)
+        factors /= factors.mean()
+        weights = args.power_weight_scale * base_spacing ** 2 * factors
+        weights = np.clip(weights, 0.0, 0.35 * base_spacing ** 2)
+    else:
+        weights = np.zeros(nS)
+
+    pc_labels = weighted_labels(pc_pts, seeds, weights)
+    face_labels = weighted_labels(P, seeds, weights)
+    F = np.asarray(mesh.faces, dtype=np.int64)
+    V = np.asarray(mesh.vertices, dtype=float)
+    FV = V[F]
+    lo_b, hi_b = mesh.bounds
+    corners = np.array([[x, y, z] for x in (lo_b[0], hi_b[0])
+                        for y in (lo_b[1], hi_b[1])
+                        for z in (lo_b[2], hi_b[2])])
+    boundary_faces = {}
+    for i in range(nS):
+        for j in range(i + 1, nS):
+            dvec = seeds[j] - seeds[i]
+            dd = float(np.linalg.norm(dvec))
+            if dd < 1e-12: continue
+            n = dvec / dd
+            mid = power_mid(seeds[i], seeds[j], weights[i], weights[j])
+            sdc = (corners - mid) @ n
+            if sdc.min() > 1e-9 or sdc.max() < -1e-9: continue
+            sd = (FV - mid) @ n
+            crosses = (sd.min(axis=1) <= 1e-9) & (sd.max(axis=1) >= -1e-9)
+            fi = np.flatnonzero(crosses)
+            if len(fi): boundary_faces[(i, j)] = fi
+
+    # fracture fill (optional)
+    fill_color = np.asarray(args.fill_color, float)
+    stride = max(1, len(pc_pts) // 200_000)
+    tree_surf = cKDTree(pc_pts[::stride])
+    fill_by_seed = {}
+    pair_stats = {}
+    if not getattr(args, "skip_fill", False):
+        max_fill = getattr(args, "fill_max_points", 200_000)
+        for (i, j), face_idx in sorted(boundary_faces.items()):
+            nv = seeds[j] - seeds[i]
+            dd = float(np.linalg.norm(nv))
+            if dd < 1e-12: continue
+            nv /= dd
+            mid = power_mid(seeds[i], seeds[j], weights[i], weights[j])
+            t_local = float(np.median(thick[face_idx])) if thick is not None else \
+                float(t_ref if t_ref else 4.0 * spacing)
+            wall_px = max(2.0, t_local / max(spacing, 1e-9))
+            height_cfg = dict(rng=rng_child(int(seed), 300 + i, 400 + j),
+                              H=args.height_H, octaves=args.height_octaves,
+                              amp=args.height_amp_scale * t_local,
+                              grain=args.grain_amp_scale * t_local,
+                              fade_px=max(2.0, args.height_fade_fraction * wall_px),
+                              wavelength_px=1.5 * wall_px)
+            color_cfg = dict(model=args.fill_color_model, tree=tree_surf, t_local=t_local,
+                             surface_color=np.asarray(args.surface_color, float),
+                             core_color=np.asarray(args.core_color, float))
+            chip_cfg = dict(prob=args.chip_prob, width_px=max(1.0, args.chip_width_scale))
+            fp, fc, st = plane_cross_fill(mesh, face_idx, nv, mid, spacing, fill_color,
+                                          rng, seeds, weights, i, j, diag, tag="",
+                                          max_fill_points=max_fill, tree_seeds=tree_seeds,
+                                          height_cfg=height_cfg, color_cfg=color_cfg,
+                                          chip_cfg=chip_cfg)
+            st["n_kept"] = st.get("n_kept", 0)
+            pair_stats[(i, j)] = st
+            if fp is None: continue
+            fill_by_seed.setdefault(i, []).append((fp, fc))
+            fill_by_seed.setdefault(j, []).append((fp, fc))
+
+    # build shells
+    label_faces = [np.where(face_labels == k)[0] for k in range(nS)]
+    faces_all = np.asarray(mesh.faces)
+    verts_all = np.asarray(mesh.vertices)
+    shells, areas, centroids = [], [], []
+    seed_to_frag = {}
+    for i in range(nS):
+        idx_f = label_faces[i]
+        if len(idx_f) < max(4, int(args.min_faces)): continue
+        vids, inv = np.unique(faces_all[idx_f].ravel(), return_inverse=True)
+        shell = trimesh.Trimesh(vertices=verts_all[vids],
+                                faces=inv.reshape(-1, 3).astype(np.int64), process=False)
+        seed_to_frag[i] = len(shells)
+        shells.append(shell)
+        areas.append(float(shell.area))
+        centroids.append(shell.vertices.mean(axis=0))
+
+    if len(shells) < min_frags:
+        return None          # degenerate fracture; caller retries with a new seed
+
+    # edges by fragment index
+    edges = []
+    for (i, j), st in pair_stats.items():
+        if st.get("n_kept", 0) < 1: continue
+        if i in seed_to_frag and j in seed_to_frag:
+            edges.append((seed_to_frag[i], seed_to_frag[j]))
+
+    # remap fill to fragment index
+    fill = {}
+    for s, lst in fill_by_seed.items():
+        if s in seed_to_frag:
+            fill[seed_to_frag[s]] = lst
+
+    return {
+        "shells": shells,
+        "areas": areas,
+        "centroids": centroids,
+        "fill": fill,
+        "edges": edges,
+        "num_fragments": len(shells),
+    }
 
 def main(argv=None):
     args = build_parser().parse_args(argv)

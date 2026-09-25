@@ -1,0 +1,13 @@
+output/*
+outputs/
+ckpt/
+__pycache__
+lightning_logs/
+*.ext3
+*.out
+**/*.egg-info/
+logs
+.venv
+.vscode
+.idea
+.DS_Store

@@ -1,157 +1,97 @@
-Here is the cleaned-up, consolidated, and properly formatted README. I fixed the path inconsistencies (standardizing on `jomon_data`), integrated the bash scripts as the primary workflow, and tucked the raw Python commands into collapsible sections to keep it clean.
-
-***
-
 # Jomon Pottery Reassembly with GARF (LoRA Fine-Tuning)
 
-Fragment 85 Jomon pots with `destruct.py`, LoRA fine-tune **GARF** on an A100, run inference on 10 held-out pots, and render reconstruction videos **locally**.
+Fragment 85 Jomon pots, LoRA fine-tune **GARF** on an RTX4070Ti (16GB VRAM),
+run inference on 10 held-out pots, and render reconstruction videos.
 
-```text
-A100  : environment + data + fine-tune + inference   (NO animation libs)
-Local : animation rendering only                      (animation libs here)
-```
+## 📸 Visuals & Media
 
----
+9 of the held out potteries.
 
-## 1. A100 Environment (GARF-recommended: `uv`)
+<p align="center">
+  <img src="media/collage_3x3.gif" alt="3x3 collage of Jomon pottery reassembly animations" width="72%" />
+</p>
 
-> No animation libraries are installed on the A100.
+**Pipeline & architecture diagrams:**
+
+<p align="center">
+  <img src="media/destruction_pipeline.png" alt="Destruction Pipeline" width="48%" />
+  <img src="media/garf_model_architecture.png" alt="GARF Model Architecture" width="48%" />
+</p>
+
+<details>
+<summary>Individual reassembly videos</summary>
+<p align="center">
+  <video src="media/animation_UD0016.mp4" width="32%" controls></video>
+  <video src="media/animation_UD0023.mp4" width="32%" controls></video>
+  <video src="media/animation_UD0302.mp4" width="32%" controls></video>
+</p>
+</details>
+
+## 1. RTX4070Ti Environment (GARF-recommended: `uv`)
 
 ```bash
-# Install uv (https://docs.astral.sh/uv/)
 curl -LsSf https://astral.sh/uv/install.sh | sh
-
 cd GARF
 uv sync                 # base deps
 uv sync --extra post    # flash-attn, pytorch3d, torch-scatter, torch-cluster
 source .venv/bin/activate
 ```
 
-Place the downloaded checkpoint inside the GARF directory:
+Place the checkpoint [GARF.ckpt](https://github.com/ai4ce/GARF/tree/main#-model-zoo):
 ```text
 GARF/output/GARF.ckpt      # bundles PTv3 feature extractor + Flow-Matching model
 ```
 
-Verify it (should print `feature_extractor.*` and `denoiser.*` keys):
-```bash
-python - <<'PY'
-import torch
-sd = torch.load("output/GARF.ckpt", map_location="cpu", weights_only=False)["state_dict"]
-print("PTv3 :", [k for k in sd if k.startswith("feature_extractor.")][:2])
-print("FM   :", [k for k in sd if k.startswith("denoiser.")][:2])
-PY
-```
+## 2. LoRA Fine-Tuning
 
----
-
-## 2. Generate Fracture Data (`destruct.py`)
-
-Produces `jomon_data/<name>/{fragments/*.ply, adjacency.json}` for all 85 pots. Point count stays high here (2M); the GARF dataset automatically downsamples to 5000 pts/object during training.
-
-```bash
-# Run from project root
-python src/destruct.py -i pottery -o jomon_data -n 8 --num-samples 2000000 --seed 42
-```
-
----
-
-## 3. LoRA Fine-Tuning (A100)
-
-Uses GARF's native `train.py` + `enable_lora()` via our wrapper script. The Jomon data module (`GARF/assembly/data/jomon/`) reads the `destruct.py` output directly (no HDF5 conversion needed).
+Training reads intact meshes from `pottery/` directly — no preprocessing step.
 
 ```bash
 cd GARF
 chmod +x scripts/train_jomon.sh scripts/infer_jomon.sh
-
-# Fine-tune on the 75 training objects
-# (Defaults to DATA_ROOT=../jomon_data and GARF_CKPT=output/GARF.ckpt)
-bash scripts/train_jomon.sh
+bash scripts/train_jomon.sh      # defaults: POTTERY_DIR=../pottery, GARF_CKPT=output/GARF.ckpt
 ```
 
-- **Train split:** First 75 objects (sorted alphabetically).
-- **Held-out split:** Last 10 objects (sorted alphabetically).
-- **Output:** LoRA weights save to `logs/GARF-Jomon/<run>/checkpoints/last.ckpt`.
+- **Train split:** first 75 objects (sorted). **Held-out:** last 10 (sorted).
+- **Output:** `logs/GARF-Jomon/<run>/checkpoints/last.ckpt`.
 
 <details>
-<summary><i>Alternative: Run raw python command</i></summary>
+<summary><i>Raw command</i></summary>
 
 ```bash
-python train.py \
-    experiment=jomon_finetune \
-    data.data_root=../jomon_data \
-    ckpt_path=output/GARF.ckpt \
-    finetuning=true \
-    model.feature_extractor_ckpt=null \
-    trainer.devices=[0]
+python train.py experiment=jomon_finetune data.pottery_dir=../pottery \
+    ckpt_path=output/GARF.ckpt finetuning=true \
+    model.feature_extractor_ckpt=null trainer.devices=[0]
 ```
 </details>
 
----
+## 3. Inference on the 10 Held-Out Objects
 
-## 4. Inference on the 10 Held-Out Objects (A100)
-
-Loads the base `GARF.ckpt`, applies your fine-tuned LoRA checkpoint, runs two-session flow matching, and writes `json_results/` (needed for animation).
+Base `GARF.ckpt` + your LoRA checkpoint → two-session flow matching.
+Inference uses a **fixed seed** per object so fractures are reproducible.
 
 ```bash
-# Run from GARF/ directory
-# (Automatically finds the newest last.ckpt if LORA_CKPT is not specified)
 bash scripts/infer_jomon.sh
 ```
 
 **Results:** `logs/GARF-Jomon/<run>/json_results/*.json`
 
-<details>
-<summary><i>Alternative: Run raw python command</i></summary>
+## 4. Generate Visuals for Animation
 
 ```bash
-python infer_jomon.py \
-    experiment=jomon_finetune \
-    data.data_root=../jomon_data \
-    +base_ckpt_path=output/GARF.ckpt \
-    ckpt_path=logs/GARF-Jomon/<run>/checkpoints/last.ckpt \
-    ++model.inference_config.one_step_init=true \
-    ++model.inference_config.write_to_json=true \
-    trainer.devices=[0]
+python src/destruct.py -i pottery -o fragmented_v1 -n 8 --num-samples 50000 --seed 42
 ```
-</details>
 
----
+## 5. Animation + Collage Rendering
 
-## 5. Animation Rendering (Local PC)
-
-> Animation libraries are installed **only here**, never on the A100.
-
-**Transfer data from A100 to your PC:**
-1. `jomon_data/` (the fragmented meshes/point clouds)
-2. `GARF/logs/GARF-Jomon/<run>/json_results/` (the predicted poses)
-
-**Set up a local environment:**
 ```bash
 python -m venv .venv-anim
-# Windows: .venv-anim\Scripts\activate   
-# Linux/macOS: source .venv-anim/bin/activate
+# Windows: .venv-anim\Scripts\activate | Linux/macOS: source .venv-anim/bin/activate
+pip install numpy scipy trimesh "imageio[ffmpeg]" pillow torch
 
-pip install numpy scipy matplotlib "imageio[ffmpeg]" trimesh
+# Render MP4s AND build the 3x3 collage GIF
+python src/render_local.py --jomon_data ./GARF/fragmented_v1 --results ./GARF/logs/GARF-Jomon/jomon_infer/version_0/json_results --out ./animations --device cuda
+
+# (Optional) rebuild the collage later without re-rendering
+python src/render_local.py --collage_only --out ./animations --cell 280
 ```
-
-**Render MP4s:**
-```bash
-python src/render_local.py \
-    --jomon_data ./jomon_data \
-    --results ./json_results \
-    --out ./animations
-```
-
-**Output:** `animations/<name>.mp4` (scattered → reassembled).
-
----
-
-## 6. Troubleshooting
-
-| Issue | Fix |
-|---|---|
-| `UnpicklingError: Weights only load failed` | Use `weights_only=False` in `torch.load` (already patched in `train.py` / `infer_jomon.py`). |
-| `ModuleNotFoundError: omegaconf` | `pip install omegaconf hydra-core` (present if you used `uv sync`). |
-| OOM during fine-tune | Lower `data.batch_size` (e.g., 2) and raise `trainer.accumulate_grad_batches`. |
-| `flash_attn` import error | Ensure `uv sync --extra post` completed; or set `model.denoiser.use_flash_attn=False` in config to use SDPA. |
-| `FileNotFoundError: adjacency.json` | Ensure `destruct.py` finished successfully and your `DATA_ROOT` path points to the folder *containing* the object directories (e.g., `../jomon_data`). |

@@ -1,0 +1,23 @@
+_target_: assembly.data.jomon.JomonDataModule
+pottery_dir: ???
+min_parts: 2
+max_parts: 20
+num_points_to_sample: 5000
+min_points_per_part: 20
+batch_size: 4
+num_workers: 4
+held_out: 10
+multi_ref: false
+random_anchor: false
+num_fragments: 8
+destruct_num_samples: 20000
+destruct_stress_model: fem_lite
+destruct_grid_res: 40
+destruct_jacobi_iters: 60
+skip_fill: false
+min_fragments: 3
+mesh_sample_strategy: poisson    # uniform | poisson | wpd
+wpd_detail_ratio: 0.30
+wpd_curv_thresh: 0.5             # 1.0 = rims only (cheapest wpd)
+include_fill: true
+fill_ratio: 0.15
