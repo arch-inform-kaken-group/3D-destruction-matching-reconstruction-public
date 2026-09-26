@@ -1,0 +1,13 @@
+# @package _global_
+
+defaults:
+  - override /model: denoiser_diffusion
+  - override /loggers: wandb
+
+project_name: 3D Assembly Denoiser
+experiment_name: denoiser_${now:%Y-%m-%d_%H-%M-%S}
+tags: ["hpc", "denoiser", "diffusion"]
+
+trainer:
+  check_val_every_n_epoch: 50
+  max_epochs: 1500

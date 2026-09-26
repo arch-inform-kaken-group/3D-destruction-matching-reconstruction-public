@@ -1,0 +1,8 @@
+_target_: lightning.pytorch.trainer.Trainer
+accelerator: auto
+devices: auto
+strategy: auto
+default_root_dir: ./output/${experiment_name}
+num_nodes: 4
+precision: 16-mixed
+max_epochs: 500

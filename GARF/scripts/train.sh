@@ -1,0 +1,14 @@
+HYDRA_FULL_ERROR=1 python train.py \
+    experiment=denoiser_flow_matching \
+    experiment_name=everyday \
+    data.categories="['everyday']" \
+    project_name="GARF" \
+    trainer.num_nodes=$NUM_NODES \
+    data.data_root=../breaking_bad_vol.hdf5 \
+    data.num_workers=8 \
+    data.batch_size=32 \
+    data.multi_ref=True \
+    tags='["flow matching", 'everyday']' \
+    data.mesh_sample_strategy="${SAMPLE_STRATEGY}" \
+    ${EXPERIMENT_NAME:+experiment_name=$EXPERIMENT_NAME} \
+    model.feature_extractor_ckpt=output/feature_extractor.ckpt

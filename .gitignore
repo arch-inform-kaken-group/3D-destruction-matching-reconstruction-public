@@ -3,9 +3,30 @@ output*
 pottery
 fragment
 .vscode
+__pycache__
 
 # Python ENV
 descon
 
 # Viz
 pipeline_viz
+
+# References
+GARF/.venv
+GARF/output/*
+GARF/outputs/
+GARF/ckpt/
+GARF/__pycache__
+GARF/lightning_logs/
+GARF/*.ext3
+GARF/*.out
+GARF/**/*.egg-info/
+GARF/logs
+GARF/.venv
+GARF/.vscode
+GARF/.idea
+GARF/.DS_Store
+GARF/gallery
+
+# Data
+fragmented_v1

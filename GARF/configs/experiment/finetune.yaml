@@ -1,0 +1,33 @@
+# @package _global_
+
+defaults:
+  - denoiser_flow_matching
+  - _self_
+
+experiment_name: finetune_${now:%Y-%m-%d_%H-%M-%S}
+tags: ["finetune"]
+
+data:
+  data_root: /scratch/zj2631/data/pastlife_synthetic.hdf5
+  categories: egg
+  multi_ref: false
+  batch_size: 32
+
+trainer:
+  max_epochs: 500
+  check_val_every_n_epoch: 10
+  log_every_n_steps: 1
+  accumulate_grad_batches: 2
+
+model:
+  lora_config:
+    _target_: peft.LoraConfig
+    r: 128
+    lora_alpha: 256
+    lora_dropout: 0.1
+    target_modules: "transformer_layers\\.\\d+\\.(self_attn_to_qkv|self_attn_to_out\\.0|global_attn_to_qkv|global_attn_to_out\\.0|ff\\.net\\.2|norm\\.d+\\.(linear|timestep_embbedder\\.(linear_1|linear_2)))"
+    modules_to_save: ["mlp_out_trans", "mlp_out_rot", "shape_embedding"]
+
+ckpt_path: output/FINAL_FM_E_SO3_MULTI_REF_VANILLA/last.ckpt
+finetuning: true
+project_name: 3D Assembly Finetune
