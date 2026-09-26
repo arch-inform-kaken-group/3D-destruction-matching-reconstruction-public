@@ -158,7 +158,7 @@ def random_unit_vector(rng):
     return v / n if n > 1e-12 else np.array([0.0, 0.0, 1.0])
 
 
-# ============================ colors / texture ============================
+# colors / texture
 def normalize_colors(arr, n):
     if arr is None: return None
     a = np.asarray(arr)
@@ -336,7 +336,7 @@ def stress_textured_mesh(mesh, s_face):
     return m
 
 
-# ============================ palette / assembly colors ============================
+# palette / assembly colors
 def fragment_palette(n, sat=0.75, val=0.95):
     """Deterministic distinct colors: golden-angle hues in HSV."""
     n = max(1, int(n))
@@ -395,7 +395,7 @@ def shade_palette(pal_rgb, base_cols, mode):
     return np.clip(np.asarray(pal_rgb, float)[None, :] * f[:, None], 0, 1)
 
 
-# ============================ stress field ============================
+# stress field
 def build_grid(mesh, res):
     diag = bbox_diagonal(mesh)
     vox = mesh.voxelized(pitch=diag / max(int(res), 16))
@@ -628,7 +628,7 @@ def nms_maxima(values,
     return np.asarray(sel, dtype=int)
 
 
-# ============================ power diagram helpers ============================
+# power diagram helpers
 def power_mid(si, sj, wi, wj):
     """Bisector plane midpoint for squared-distance power diagram.
     Larger w_i pushes the interface toward j (cell i grows)."""
@@ -654,7 +654,7 @@ def weighted_two_nearest(points, seeds, weights):
     return np.sort(nn, axis=1)
 
 
-# ============================ sampling ============================
+# sampling
 def sample_surface_points_colors(mesh, colors, n, rng):
     n = int(max(0, n))
     if n <= 0 or len(mesh.faces) == 0:
@@ -691,7 +691,7 @@ def make_plane_basis(normal):
     return u, v
 
 
-# ============================ exact triangle-plane intersection ============================
+# exact triangle-plane intersection
 def plane_segments(mesh, face_idx, nv, mid, eps=1e-9):
     """Exact intersection segments + per-segment triangle normals."""
     if len(face_idx) == 0:
@@ -761,7 +761,7 @@ def plane_segments(mesh, face_idx, nv, mid, eps=1e-9):
     return np.concatenate(out, axis=0), np.concatenate(onrm, axis=0)
 
 
-# ============================ chaining / raster helpers ============================
+# chaining / raster helpers
 def _chain_polylines(segs2, snap):
     keys = {}
     node = []
@@ -910,7 +910,7 @@ def _disk(r):
     return (d[:, None]**2 + d[None, :]**2) <= r * r
 
 
-# ============================ fracture surface fields ============================
+# fracture surface fields
 def _value_noise_2d(shape, g, rng):
     rows, cols = shape
     g = int(max(2, min(g, min(rows, cols))))
@@ -946,7 +946,7 @@ def fbm2(shape, rng, H, octaves, base_g=4):
     return val / s if s > 1e-9 else val
 
 
-# ============================ cross-section fill ============================
+# cross-section fill
 def plane_cross_fill(mesh,
                      face_idx,
                      nv,
@@ -1123,7 +1123,7 @@ def plane_cross_fill(mesh,
             n_mo += 1
             used_o.add(a)
     stats["matched_open"], stats["matched_closed"] = n_mo, n_mc
-    # micro-chipping of fracture rim (v10)
+    # micro-chipping of fracture rim 
     if chip_cfg is not None and fill.any():
         edge = distance_transform_edt(fill)
         p_chip = chip_cfg["prob"] * np.exp(-edge / max(1e-9,
@@ -1150,7 +1150,7 @@ def plane_cross_fill(mesh,
                                                None] * u +
            (ymin + (fy + 0.5 + jy) * gs)[:,
                                          None] * v)
-    # shared fractal relief, faded to 0 at the intersection curve (v10)
+    # shared fractal relief, faded to 0 at the intersection curve 
     h = np.zeros(len(fx))
     if height_cfg is not None:
         edge = distance_transform_edt(fill)
@@ -1182,7 +1182,7 @@ def plane_cross_fill(mesh,
         sel = rng.choice(len(pts), max_fill_points, replace=False)
         pts, h = pts[sel], h[sel]
         fy, fx = fy[sel], fx[sel]
-    # cross-section coloring (v10)
+    # cross-section coloring 
     if color_cfg is not None and color_cfg.get("model") == "depth_core":
         d_surf, _ = color_cfg["tree"].query(pts)
         depth = np.clip(d_surf / (0.5 * max(color_cfg["t_local"],
@@ -1205,7 +1205,7 @@ def plane_cross_fill(mesh,
     return pts, cols_arr, stats
 
 
-# ============================ per-file processing ============================
+# per-file processing
 def process_file(in_path, out_root, args):
     t0 = time.time()
     stem = in_path.stem
@@ -1241,7 +1241,7 @@ def process_file(in_path, out_root, args):
                                        1))) if area > 1e-18 else diag / 1000.0
     log(f"  [{stem}] complete pc: {len(pc_pts):,} pts (spacing~{spacing:.4g})")
 
-    # stress + physical thickness (v10)
+    # stress + physical thickness 
     bundle = compute_stress(mesh, args, diag)
     s_hat, thick, t_ref, curv = bundle["s_hat"], bundle["thick"], bundle["t_ref"], bundle["curv"]
     P = mesh.triangles_center
@@ -1261,7 +1261,7 @@ def process_file(in_path, out_root, args):
         score = score * np.exp(args.noise_sigma * noise)
     else:
         noise = np.zeros(len(P))
-    # feature-aware bias: rim proximity, curvature, thinness (v10)
+    # feature-aware bias: rim proximity, curvature, thinness 
     e = np.sort(np.asarray(mesh.edges), axis=1)
     uniq_e, cnt_e = np.unique(e, axis=0, return_counts=True)
     rim_pts = np.asarray(mesh.vertices)[uniq_e[cnt_e == 1]].mean(1) if (
@@ -1284,7 +1284,7 @@ def process_file(in_path, out_root, args):
         thin_bias = np.ones(len(P))
     score = norm01(score * rim_bias * curv_bias * thin_bias)
 
-    # stochastic seeds (v10)
+    # stochastic seeds 
     sidx = nms_maxima(score,
                       P,
                       diag / (2.2 * max(args.fragments,
@@ -1298,7 +1298,7 @@ def process_file(in_path, out_root, args):
     tree_seeds = cKDTree(seeds)
     log(f"  [{stem}] seeds: {nS}")
 
-    # power-diagram weights for log-normal shard sizes (v10)
+    # power-diagram weights for log-normal shard sizes 
     if args.size_sigma > 0 and nS > 1:
         base_spacing = diag / max(args.fragments, 2)**(1.0 / 3.0)
         factors = rng_child(args.seed, 202).lognormal(0.0, args.size_sigma, nS)
@@ -1630,7 +1630,7 @@ def process_file(in_path, out_root, args):
     }
 
 
-# ============================ CLI ============================
+# CLI
 def build_parser():
     p = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -1717,17 +1717,15 @@ def build_parser():
     g.add_argument("--seed", type=int, default=42)
     return p
 
-# ============================================================
 # In-memory fragmentation for on-the-fly training data
-# ============================================================
 def fast_destruct_args(num_fragments=8, num_samples=20_000, **overrides):
     """Reduced-resolution settings for fast on-the-fly training data."""
     base = dict(
-        num_samples=num_samples,      # only for labeling/fill spacing, NOT saved
+        num_samples=num_samples,
         fill_color=CLAY.tolist(),
         stress_model="fem_lite",      # use "curvature" for ~3x faster (less realistic)
-        grid_res=40,                  # down from 64
-        jacobi_iters=60,              # down from 150
+        grid_res=40,
+        jacobi_iters=60,
         impact_dir=[1.0, 0.0, 0.35],
         w_vol=1.0, w_curv=0.6, w_thin=0.8,
         thickness_alpha=1.5, thickness_cap=5.0,
@@ -1802,7 +1800,7 @@ def generate_fragments_in_memory(mesh, args, seed):
         thin_bias = np.ones(len(P))
     score = norm01(score * rim_bias * curv_bias * thin_bias)
 
-    # --- stochastic seeds (v10), with a minimum-fragment guarantee ---
+    # stochastic seeds, with a minimum-fragment guarantee
     min_frags = int(getattr(args, "min_fragments", 3))
     base_radius = diag / (2.2 * max(args.fragments, 2) ** (1 / 3))
     radius = base_radius

@@ -21,6 +21,14 @@ run inference on 10 held-out pots, and render reconstruction videos.
   <img src="media/poisson/collage_3x3.gif" alt="3x3 collage of Jomon pottery reassembly animations" width="72%" />
 </p>
 
+**Individual reassembly videos for poisson disk sampling**
+
+<p align="center">
+  <video src="media/poisson/UD0322(82).mp4" width="32%" controls></video>
+  <video src="media/poisson/UD0411(83).mp4" width="32%" controls></video>
+  <video src="media/poisson/UK0001(85).mp4" width="32%" controls></video>
+</p>
+
 ### Weighted Poisson Disk Sampling
 
 <p align="center">
@@ -32,14 +40,6 @@ run inference on 10 held-out pots, and render reconstruction videos.
 <p align="center">
   <img src="media/destruction_pipeline.png" alt="Destruction Pipeline" width="48%" />
   <img src="media/garf_model_architecture.png" alt="GARF Model Architecture" width="48%" />
-</p>
-
-**Individual reassembly videos for poisson disk sampling**
-
-<p align="center">
-  <video src="media/poisson/UD0322(82).mp4" width="32%" controls></video>
-  <video src="media/poisson/UD0411(83).mp4" width="32%" controls></video>
-  <video src="media/poisson/UK0001(85).mp4" width="32%" controls></video>
 </p>
 
 # Usage

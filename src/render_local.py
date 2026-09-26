@@ -7,9 +7,7 @@ Local-PC / GPU animation of GARF reassembly for Jomon pottery.
 
 Deps: numpy scipy trimesh imageio[ffmpeg] pillow  (+ torch for GPU path)
 Usage:
-  python src/render_local.py --jomon_data ./fragmented_v1 \
-      --results ./GARF/logs/GARF-Jomon/jomon_infer/version_0/json_results \
-      --out ./animations --device cuda
+  python src/render_local.py --jomon_data ./fragmented_v1 --results ./GARF/logs/GARF-Jomon/jomon_infer/version_0/json_results --out ./animations --device cuda
   # rebuild collage later from existing MP4s (no re-render):
   python src/render_local.py --collage_only --out ./animations
 """
@@ -37,7 +35,7 @@ UP_FIX = {
 }
 
 
-# ---------------- SE(3) helpers (GARF scalar-first quats [w,x,y,z]) ----------
+# SE(3) helpers (GARF scalar-first quats [w,x,y,z])
 def quat_wxyz_to_matrix(q):
     q = np.asarray(q, dtype=np.float64)
     return R.from_quat([q[1], q[2], q[3], q[0]]).as_matrix()
@@ -87,7 +85,7 @@ def look_at(eye, center, up=np.array([0.0, 0.0, 1.0])):
     return np.stack([r, u, f])
 
 
-# ---------------- GPU point-splatting renderer -------------------------------
+# GPU point-splatting renderer
 class GPURenderer:
     def __init__(self, W, H, device, radius=1, bg=1.0, fov=40.0):
         self.W, self.H, self.dev, self.bg = W, H, device, bg
@@ -131,7 +129,7 @@ class GPURenderer:
         return color_buf.reshape(self.H, self.W, 3).clamp(0, 1).cpu().numpy()
 
 
-# ---------------- collage GIF ------------------------------------------------
+# collage GIF
 def video_to_cells(path, cell, n_out):
     """Read an MP4; return n_out uniformly sampled frames resized to (cell, cell)."""
     try:
@@ -185,7 +183,7 @@ def build_collage_gif(mp4_paths, out_gif, cell=320, n_frames=40, fps=12,
     print(f"saved collage {out_gif} ({len(slots)} videos, {W}x{H})")
 
 
-# ---------------- per-object animation ---------------------------------------
+# per-object animation
 def render_object(obj_dir, result, out_path, Q, renderer,
                   n_frames=60, fps=30, dpi=300, max_points=30000, pause_seconds=2.0):
     mesh_scale = float(result["mesh_scale"])
@@ -250,7 +248,7 @@ def render_object(obj_dir, result, out_path, Q, renderer,
             frames.append(np.asarray(fig.canvas.buffer_rgba())[:, :, :3])
             plt.close(fig)
 
-    # --- NEW: Hold the final assembled state for `pause_seconds` ---
+    # Hold the final assembled state for `pause_seconds`
     pause_frames = int(pause_seconds * fps)
     if frames and pause_frames > 0:
         last_frame = frames[-1]
@@ -324,7 +322,7 @@ def main():
                                           fps=args.fps, max_points=args.max_points,
                                           pause_seconds=args.pause_seconds))
 
-    # ---------------- collage ----------------
+    # collage
     if args.no_collage:
         return
     candidates = rendered if rendered else sorted(out.glob("*.mp4"))
