@@ -9,7 +9,7 @@ test inference is run on 10 held-out pots, and render reconstruction videos.
 | :-- | :-- | :-- | :-- | :-- |
 | Furthest Point | 5.44 | 2.33 | 0.97 | 0.66 |
 | Weighted Poisson Disk | 5.25 | 2.11 | 0.99 | 0.78 |
-| Poisson Disk | **3.33** | **1.46** | **1.000** | **0.58** |
+| Poisson Disk | **3.33** | **1.46** | **1.00** | **0.58** |
 
 *PA is the percentage of correctly assembled fragments, where the per-fragment chamfer distance is below 0.01*
 
