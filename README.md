@@ -23,11 +23,19 @@ test inference is run on 10 held-out pots, and render reconstruction videos.
 
 **Individual reassembly videos for poisson disk sampling**
 
-<p align="center">
-  <video src="./media/poisson/UD0322(82).mp4" width="32%" controls></video>
-  <video src="./media/poisson/UD0411(83).mp4" width="32%" controls></video>
-  <video src="./media/poisson/UK0001(85).mp4" width="32%" controls></video>
-</p>
+<table align="center">
+  <tr>
+    <td width="33%">
+      <video src="https://github.com/user-attachments/assets/c00da6dd-b0cf-4cd5-84c8-966efd6ca2ea" controls></video>
+    </td>
+    <td width="33%">
+      <video src="https://github.com/user-attachments/assets/c9216f4f-7705-4d53-b45a-430b207d035f" controls></video>
+    </td>
+    <td width="33%">
+      <video src="https://github.com/user-attachments/assets/fdb8c404-9ab9-4f0a-89bc-8a3343c2b941" controls></video>
+    </td>
+  </tr>
+</table>
 
 ### Weighted Poisson Disk Sampling
 <details>
