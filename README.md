@@ -24,9 +24,9 @@ test inference is run on 10 held-out pots, and render reconstruction videos.
 **Individual reassembly videos for poisson disk sampling**
 
 <p align="center">
-  <video src="https://githubusercontent.com/arch-inform-kaken-group/3D-destruction-matching-reconstruction-public/tree/public/media/poisson/UD0411(82).mp4" width="32%" controls></video>
-  <video src="https://githubusercontent.com/arch-inform-kaken-group/3D-destruction-matching-reconstruction-public/tree/public/media/poisson/UD0411(83).mp4" width="32%" controls></video>
-  <video src="https://githubusercontent.com/arch-inform-kaken-group/3D-destruction-matching-reconstruction-public/tree/public/media/poisson/UK0001(85).mp4" width="32%" controls></video>
+  <video src="https://raw.githubusercontent.com/arch-inform-kaken-group/3D-destruction-matching-reconstruction-public/public/media/poisson/UD0411(82).mp4" width="32%" controls></video>
+  <video src="https://raw.githubusercontent.com/arch-inform-kaken-group/3D-destruction-matching-reconstruction-public/public/media/poisson/UD0411(83).mp4" width="32%" controls></video>
+  <video src="https://raw.githubusercontent.com/arch-inform-kaken-group/3D-destruction-matching-reconstruction-public/public/media/poisson/UK0001(85).mp4" width="32%" controls></video>
 </p>
 
 ### Weighted Poisson Disk Sampling
