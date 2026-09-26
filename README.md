@@ -1,21 +1,21 @@
 # Jomon Pottery Reassembly with GARF (LoRA Fine-Tuning)
 
-Fragment 85 Jomon pots, LoRA fine-tune [**GARF**](https://arxiv.org/abs/2504.05400) on an RTX4070Ti (16GB VRAM),
-run inference on 10 held-out pots, and render reconstruction videos.
+Fragment are generated from 85 Jomon pots, LoRA fine-tune of [**GARF**](https://arxiv.org/abs/2504.05400) on an RTX4070Ti (16GB VRAM),
+test inference is run on 10 held-out pots, and render reconstruction videos.
 
 ## Visuals & Metrics
 
-**9 of the held out potteries.**
-
 | Sampling Method </br> $\text{ }$ | RMSE(Rotation) $\downarrow$ </br> degree | RMSE(Translation) $\downarrow$ </br> $×10^{−2}$ | PA $\uparrow$ </br> % | Chamfer Distance $\downarrow$ </br> $×10^{−3}$ |
 | :-- | :-- | :-- | :-- | :-- |
-| Uniform | - | - | - | - |
+| Furthest Point | 5.44 | 2.33 | 0.97 | 0.66 |
+| Weighted Poisson Disk | 5.25 | 2.11 | 0.99 | 0.78 |
 | Poisson Disk | **3.33** | **1.46** | **1.000** | **0.58** |
-| Weighted Poisson Disk | 5.25 | 2.11 | 0.988 | 0.78 |
 
 *PA is the percentage of correctly assembled fragments, where the per-fragment chamfer distance is below 0.01*
 
 ### Poisson Disk Sampling
+
+**9 of the held out potteries.**
 
 <p align="center">
   <img src="media/poisson/collage_3x3.gif" alt="3x3 collage of Jomon pottery reassembly animations" width="72%" />
@@ -30,12 +30,24 @@ run inference on 10 held-out pots, and render reconstruction videos.
 </p>
 
 ### Weighted Poisson Disk Sampling
-
+<details>
+<summary>Expand to see Gif</summary>
 <p align="center">
   <img src="media/wpd/collage_3x3.gif" alt="3x3 collage of Jomon pottery reassembly animations" width="72%" />
 </p>
+</details>
 
-**Pipeline & architecture diagrams:**
+### Furthest Point Sampling
+<details>
+<summary>Expand to see Gif</summary>
+<p align="center">
+  <img src="media/fps/collage_3x3.gif" alt="3x3 collage of Jomon pottery reassembly animations" width="72%" />
+</p>
+</details>
+
+</br>
+
+## **Pipeline & architecture diagrams:**
 
 <p align="center">
   <img src="media/destruction_pipeline.png" alt="Destruction Pipeline" width="48%" />
