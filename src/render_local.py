@@ -262,6 +262,112 @@ def render_object(obj_dir, result, out_path, Q, renderer,
     print(f"saved {out_path}")
     return out_path
 
+# intermediate-step panel
+def save_step_panel(obj_dir, result, out_path, Q, renderer,
+                    steps=(0, 1, 5, 10, -1), dpi=330, max_points=30000,
+                    panel_in=6.0, height_in=6.4,
+                    title_fs=24, label_fs=17):
+    """Horizontal panel of reconstruction poses at explicit flow-matching steps.
+    Step numbering: 0 = scattered/normalized input (MP4 frame 0);
+                    k >= 1 = pred_trans_rots[k-1];
+                    -1 = final refined pose.
+    Title: 'Reconstruction of <name>'; x-axis labels = step numbers.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    name = result["name"]
+    mesh_scale = float(result["mesh_scale"])
+    gt = np.asarray(result["gt_trans_rots"], dtype=np.float64)
+    pred_steps = result["pred_trans_rots"]
+    num_parts = int(result["num_parts"])
+    nodes = json.loads((obj_dir / "adjacency.json").read_text())["nodes"]
+
+    part_pts, part_cols, inv_gts = [], [], []
+    for i, node in enumerate(nodes[:num_parts]):
+        pts, cols = load_fragment_pcd(obj_dir / node["ply"], max_points)
+        part_pts.append((pts / mesh_scale) @ Q.T)
+        part_cols.append(cols)
+        inv_gts.append(np.linalg.inv(se3_from_vec(gt[i])))
+
+    # step 0 pose: scattered/normalized input (same as MP4 first frame)
+    T_input = [conjugate(g, Q) for g in inv_gts]
+    T_end = [conjugate(se3_from_vec(pred_steps[-1][i]) @ inv_gts[i], Q)
+             for i in range(num_parts)]
+
+    # fixed framing + camera so all panels are directly comparable
+    extremes = []
+    for Ts in (T_input, T_end):
+        for i in range(num_parts):
+            extremes.append((Ts[i][:3, :3] @ part_pts[i].T).T + Ts[i][:3, 3])
+    allp = np.concatenate(extremes)
+    center = allp.mean(0)
+    half = float(np.abs(allp - center).max()) * 1.15
+
+    # explicit schedule: (xlabel, traj_idx); -1 => final step
+    n_traj = len(pred_steps)
+    schedule, seen = [], set()
+    for g in steps:
+        if g == 0:
+            traj, key, label = None, -1, "step 0"
+        else:
+            traj = (n_traj - 1) if g < 0 else min(int(g) - 1, n_traj - 1)
+            key = traj
+            label = f"step {traj + 1}" + (" (last)" if traj == n_traj - 1 else "")
+        if key in seen:
+            continue
+        seen.add(key)
+        schedule.append((label, traj))
+    n_show = len(schedule)
+
+    def pose_points(traj_idx):
+        P, C = [], []
+        for i in range(num_parts):
+            T = T_input[i] if traj_idx is None else \
+                conjugate(se3_from_vec(pred_steps[traj_idx][i]) @ inv_gts[i], Q)
+            P.append((T[:3, :3] @ part_pts[i].T).T + T[:3, 3])
+            C.append(part_cols[i])
+        return np.concatenate(P), np.concatenate(C)
+
+    if renderer is not None:                                   # GPU path
+        imgs = []
+        for idx, k in schedule:
+            eye=0
+            if (idx=='step 0'):
+                eye = center + half * 2.85 * np.array([np.cos(np.deg2rad(20)) * np.cos(np.deg2rad(45)),
+                                                        np.cos(np.deg2rad(20)) * np.sin(np.deg2rad(45)),
+                                                        np.sin(np.deg2rad(20))])
+            else:
+                eye = center + half * 2.25 * np.array([np.cos(np.deg2rad(20)) * np.cos(np.deg2rad(45)),
+                                                                        np.cos(np.deg2rad(20)) * np.sin(np.deg2rad(45)),
+                                                                        np.sin(np.deg2rad(20))])
+            imgs.append(renderer.render(*pose_points(k), eye, center))
+        fig, axes = plt.subplots(1, n_show, figsize=(panel_in * n_show, height_in))
+        for ax, img, (lab, _) in zip(np.atleast_1d(axes), imgs, schedule):
+            ax.imshow(img, interpolation="lanczos")       # smoother upscale
+            ax.set_xticks([]); ax.set_yticks([])
+            ax.set_xlabel(lab, fontsize=label_fs)         # bigger step numbers
+            for s in ax.spines.values():
+                s.set_visible(False)
+    else:                                                      # CPU fallback
+        fig = plt.figure(figsize=(4.2 * n_show, 4.6))
+        for j, (lab, k) in enumerate(schedule):
+            ax = fig.add_subplot(1, n_show, j + 1, projection="3d")
+            P, C = pose_points(k)
+            ax.scatter(P[:, 0], P[:, 1], P[:, 2], c=C, s=1, depthshade=False)
+            ax.set_xlim(center[0] - half, center[0] + half)
+            ax.set_ylim(center[1] - half, center[1] + half)
+            ax.set_zlim(center[2] - half, center[2] + half)
+            ax.set_axis_off()
+            ax.set_xlabel(lab, fontsize=16)
+
+    fig.suptitle(f"Reconstruction of {name}", fontsize=title_fs)   # bigger title
+    fig.tight_layout(rect=[0, 0.02, 1, 0.95])
+    fig.savefig(str(out_path), dpi=dpi, bbox_inches="tight")       # bigger pixels
+    plt.close(fig)
+    print(f"saved {out_path}")
+    return out_path
 
 def main():
     ap = argparse.ArgumentParser()
@@ -287,6 +393,15 @@ def main():
     ap.add_argument("--cell", type=int, default=320)
     ap.add_argument("--collage_frames", type=int, default=40)
     ap.add_argument("--collage_fps", type=int, default=12)
+    ap.add_argument("--panel_resolution", type=int, default=1200,
+                    help="splat resolution for step-panel images")
+    ap.add_argument("--panel_dpi", type=int, default=330)
+    ap.add_argument("--panel_fontscale", type=float, default=2.0,
+                    help="text size multiplier (title 16->24, labels 11->16)")
+    ap.add_argument("--panel_steps", nargs="*", type=int, default=[0, 1, 5, 15, 18, -1],
+                    help="global steps for the PNG panel (0=input, -1=last)")
+    ap.add_argument("--no_panels", action="store_true",
+                    help="skip per-object intermediate-step PNG panels")
     args = ap.parse_args()
 
     out = Path(args.out)
@@ -307,6 +422,11 @@ def main():
         else:
             print("[INFO] CPU matplotlib fallback")
 
+        panel_renderer = renderer
+        if renderer is not None and args.panel_resolution != args.resolution:
+            panel_renderer = GPURenderer(args.panel_resolution, args.panel_resolution,
+                                         torch.device("cuda"), radius=args.point_radius)
+
         jomon, results = Path(args.jomon_data), Path(args.results)
         for jf in sorted(results.glob("*.json")):
             result = json.loads(jf.read_text())
@@ -321,6 +441,13 @@ def main():
                                           Q, renderer, n_frames=args.frames,
                                           fps=args.fps, max_points=args.max_points,
                                           pause_seconds=args.pause_seconds))
+
+            if not args.no_panels:
+                save_step_panel(obj_dir, result, out / f"{name}_steps.png",
+                                Q, panel_renderer, steps=args.panel_steps,
+                                dpi=args.panel_dpi, max_points=args.max_points,
+                                title_fs=int(18 * args.panel_fontscale),
+                                label_fs=int(16 * args.panel_fontscale))
 
     # collage
     if args.no_collage:
