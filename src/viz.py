@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse, sys, time
 from pathlib import Path
+import traceback
 
 import numpy as np
 
@@ -20,8 +21,12 @@ from scipy.ndimage import distance_transform_edt, binary_dilation
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 try:
-    import archive.desturction.physics_destruct_v3 as pipe
-except ImportError:
+    import destruct as pipe
+except ImportError as e:
+    print(f"\n[ERROR] Failed to import the pipeline module!")
+    print(f"Ensure the 'archive' folder is in the project root directory.")
+    print(f"Details: {e}\n")
+    traceback.print_exc()
     sys.exit(1)
 
 MCM = matplotlib.colormaps
@@ -264,7 +269,7 @@ def viz_01_input(pc_pts, pc_cols, outdir, view_angles):
         ax,
         pc_pts.min(0),
         pc_pts.max(0),
-        f"Stage 1: Original Artifact\nPoint Cloud Representation ({len(pc_pts):,} pts)",
+        f"(1) Original Artifact\nPoint Cloud",
         view_angles=view_angles,
         zoom=ZOOM)
     save(fig, outdir / "01_input_mesh.png")
@@ -280,7 +285,7 @@ def viz_02_density(pc_pts, pc_cols, outdir, view_angles):
     clean3d(ax,
             pts.min(0),
             pts.max(0),
-            "Stage 2: Surface Sampling Densityn\nand Spatial Uniformity",
+            "INFO: Surface Sampling Density\nand Spatial Uniformity",
             view_angles=view_angles,
             zoom=ZOOM)
     save(fig, outdir / "02_point_cloud.png")
@@ -305,7 +310,7 @@ def viz_03_stress(pc_pts, score_f, outdir, view_angles):
         ax,
         pc_pts.min(0),
         pc_pts.max(0),
-        "Stage 3: Computed Structural Stress Map\n(Thickness, Feature Bias, and Multi-frequency Noise)",
+        "(2) Structural Stress Map\n(Thickness, Feature Bias,\nand Multi-frequency Noise)",
         view_angles=view_angles,
         zoom=ZOOM)
     save(fig, outdir / "03_stress_field.png")
@@ -321,7 +326,7 @@ def viz_04_thickness(pc_pts, thick_f, outdir, view_angles):
     clean3d(ax,
             pc_pts.min(0),
             pc_pts.max(0),
-            "Stage 3b: Volumetric Wall Thickness Estimation",
+            "(3) Volumetric Wall\nThickness Estimation",
             view_angles=view_angles,
             zoom=ZOOM)
     save(fig, outdir / "04_wall_thickness.png")
@@ -332,45 +337,22 @@ def viz_05_seeds(pc_pts, score_f, seeds, seed_normals, outdir, view_angles):
     psub, csub = _sub(pc_pts, cols, 100_000)
     fig = plt.figure(figsize=(7, 6))
     ax = fig.add_subplot(projection="3d")
-    pc(ax, psub, csub * 0.85, s=0.35, n=10**9)  # stress underlay
+    
+    # 1. Plot pottery point cloud with 0.3 transparency
+    ax.scatter(psub[:, 0], psub[:, 1], psub[:, 2], 
+               c=csub * 0.85, s=0.30, alpha=0.1, 
+               depthshade=False, rasterized=True)
 
-    # Backface Culling for Seeds
-    # Calculate camera direction vector from the captured view angles
-    elev, azim = view_angles[0], view_angles[1]
-    elev_rad = np.radians(elev)
-    azim_rad = np.radians(azim)
-    cam_dir = np.array([
-        np.cos(elev_rad) * np.cos(azim_rad),
-        np.cos(elev_rad) * np.sin(azim_rad),
-        np.sin(elev_rad)
-    ])
-
-    # A seed is visible if its surface normal points towards the camera (dot product > 0)
-    visibility = seed_normals @ cam_dir
-    visible_seeds = seeds[visibility
-                          > 0.1]  # 0.1 threshold avoids edge-on artifacts
-
-    if len(visible_seeds) > 0:
-        # Plot visible seeds with high contrast and zorder to ensure they pop over the point cloud
-        ax.scatter(visible_seeds[:,
-                                 0],
-                   visible_seeds[:,
-                                 1],
-                   visible_seeds[:,
-                                 2],
-                   c='lime',
-                   s=95,
-                   edgecolors='black',
-                   linewidths=0.8,
-                   depthshade=False,
-                   zorder=10,
-                   label='Visible Seeds')
+    # 2. Plot ALL seeds (backface culling removed) and make them highly visible
+    ax.scatter(seeds[:, 0], seeds[:, 1], seeds[:, 2],
+               c='lime', s=80, edgecolors='black', linewidths=1.5,
+               depthshade=False, zorder=10, label='All Seeds')
 
     clean3d(
         ax,
         pc_pts.min(0),
         pc_pts.max(0),
-        f"Stage 4: Fracture Seed Generation ({len(seeds)} Seeds)\nOverlaying Structural Stress Map",
+        f"(4) Fracture Seed Generation",
         view_angles=view_angles)
     save(fig, outdir / "05_seeds.png")
 
@@ -384,7 +366,7 @@ def viz_06_labels(pc_pts, pc_labels, nS, outdir, view_angles):
         ax,
         pc_pts.min(0),
         pc_pts.max(0),
-        f"Stage 5: Volumetric Fragment Partitioning ({nS} Regions)\nUsing Log-normal Power Diagrams",
+        f"(5) Volumetric Fragment Partitioning",
         view_angles=view_angles,
         zoom=ZOOM)
     save(fig, outdir / "06_voronoi_labels.png")
@@ -468,7 +450,7 @@ def viz_07_plane(pc_pts,
     clean3d(ax1,
             pc_pts.min(0),
             pc_pts.max(0),
-            f"Stage 7: Cut Plane Intersection",
+            f"(6A) Cut Plane Intersection",
             view_angles=view_angles)
 
     ax2 = fig.add_subplot(1, 2, 2)
@@ -479,7 +461,7 @@ def viz_07_plane(pc_pts,
             ax2.plot(sgm[:, 0], sgm[:, 1], "r-", lw=1.6)
         ax2.set_aspect("equal")
         clean2d(ax2)
-        ax2.set_title(f"Stage 7: 2D Projected Boundary Segments",
+        ax2.set_title(f"(6B) 2D Projected Boundary Segments",
                       fontsize=16,
                       fontweight="bold")
     fig.tight_layout()
@@ -608,7 +590,7 @@ def viz_08_fill(segs, nv, mid, u, v, spacing, diag, outdir):
                    cmap="gray_r",
                    origin="lower",
                    interpolation="nearest")
-    axes[0].set_title("Stage 8A: Bounding Envelope of Segments",
+    axes[0].set_title("(7A) Bounding Envelope of Segments",
                       fontsize=16,
                       fontweight="bold")
 
@@ -618,7 +600,7 @@ def viz_08_fill(segs, nv, mid, u, v, spacing, diag, outdir):
     axes[1].imshow(overlay, origin="lower", interpolation="nearest")
     axes[1].set_title(
         # f"Stage 8B: Rasterized Solid Fill Mask ({int(fill.sum())} px)",
-        f"Stage 8B: Rasterized Solid Fill Mask",
+        f"(7B) Rasterized Solid Fill Mask",
         fontsize=16,
         fontweight="bold")
 
@@ -627,7 +609,7 @@ def viz_08_fill(segs, nv, mid, u, v, spacing, diag, outdir):
         py = (p[:, 1] - ymin) / gs
         axes[2].plot(px, py, "r-" if c else "b-", lw=1.0, alpha=0.8)
     axes[2].set_title(
-        f"Stage 8C: Chained Vector Polylines\n(Closed={len(closed_p)}, Open={len(open_p)})",
+        f"(7C) Chained Vector Polylines",
         fontsize=16,
         fontweight="bold")
     for ax in axes:
@@ -776,20 +758,24 @@ def viz_09_terrain(fill_result,
                                            psub,
                                            title=f"Set 3D View for Fragment")
 
-    # Setup 5-subplot figure layout (2 rows, 3 columns, bottom row spanning)
-    fig = plt.figure(figsize=(18, 11))
-    gsf = gridspec.GridSpec(2, 3, figure=fig, hspace=0.15, wspace=0.15)
+    # ---- Single-row layout: 4 panels + slim colorbar column ----
+    fig = plt.figure(figsize=(22, 6.0))
+    gsf = gridspec.GridSpec(1, 5, figure=fig,
+                            width_ratios=[1.0, 1.0, 1.0, 1.0, 0.04],
+                            wspace=0.28)
 
     # 1. Base FBM Heightfield
     ax_a = fig.add_subplot(gsf[0, 0])
     ax_a.imshow(field, cmap="RdBu_r", origin="lower", interpolation="bilinear")
-    ax_a.set_title("Base FBM Heightfield", fontsize=10, fontweight="bold")
+    ax_a.set_aspect("equal", adjustable="datalim")  # keep box full-cell => aligned row
+    ax_a.set_title("(A) Base FBM Heightfield", fontsize=10, fontweight="bold")
     clean2d(ax_a)
 
     # 2. Edge Proximity Fade Mask
     ax_b = fig.add_subplot(gsf[0, 1])
     ax_b.imshow(fade, cmap="magma", origin="lower", interpolation="nearest")
-    ax_b.set_title("Edge Proximity Fade Mask", fontsize=10, fontweight="bold")
+    ax_b.set_aspect("equal", adjustable="datalim")
+    ax_b.set_title("(B) Edge Proximity Fade Mask", fontsize=10, fontweight="bold")
     clean2d(ax_b)
 
     # 3. 2D View (Cut Plane Projection)
@@ -797,54 +783,31 @@ def viz_09_terrain(fill_result,
     rel_ctx = csub - mid
     ctx_u = rel_ctx @ u
     ctx_v = rel_ctx @ v
-    ax_c.scatter(ctx_u,
-                 ctx_v,
-                 c='lightgray',
-                 s=0.3,
-                 alpha=0.4,
-                 rasterized=True)
-    sc = ax_c.scatter(u_coords,
-                      v_coords,
-                      c=h_vals,
-                      cmap="terrain_r",
-                      s=2.5,
-                      alpha=0.9,
-                      rasterized=True)
-    ax_c.set_aspect('equal')
+    ax_c.scatter(ctx_u, ctx_v, c='lightgray', s=0.3, alpha=0.4, rasterized=True)
+    sc = ax_c.scatter(u_coords, v_coords, c=h_vals, cmap="terrain_r",
+                      s=2.5, alpha=0.9, rasterized=True)
+    ax_c.set_aspect("equal", adjustable="datalim")  # equal units, box stays aligned
     clean2d(ax_c)
-    ax_c.set_title(f"2D Projection: Relief on Fragment",
-                   fontsize=10,
-                   fontweight="bold")
-    cbar = fig.colorbar(sc, ax=ax_c, shrink=0.7, pad=0.02)
-    cbar.set_label("Displacement", fontsize=8)
+    ax_c.set_title("(C) 2D Projection: Relief on Fragment",
+                   fontsize=10, fontweight="bold")
 
     # 4. 3D View (Isolated Fragment + Relief) using your custom angle
-    ax_d = fig.add_subplot(gsf[1, 0], projection="3d")
+    ax_d = fig.add_subplot(gsf[0, 3], projection="3d")
     pc(ax_d, csub, gray_rgba(len(csub), 0.15), s=0.3, n=10**9)
     pc(ax_d, psub, cmap("terrain")((hsub - h_vals.min()) / hrange)[:, :3], s=1.2, n=10**9)
     allp = np.vstack([csub, psub])
-    clean3d(ax_d,
-            allp.min(0),
-            allp.max(0),
-            f"3D View: Procedural Relief on Fragment",
-            view_angles=fragment_view)
+    clean3d(ax_d, allp.min(0), allp.max(0), "", view_angles=fragment_view)
+    ax_d.set_title("(D) 3D View: Procedural Relief on Fragment",
+                   fontsize=10, fontweight="bold")  # override clean3d's size-16 title
 
-    # 5. Cross-section Profile (Spanning 2 columns)
-    ax_e = fig.add_subplot(gsf[1, 1:])
-    x_world = xmin + (np.arange(cols) + 0.5) * gs
-    prof = h_full[rows // 2, :]
-    ax_e.fill_between(x_world, 0, prof, alpha=0.35, color="saddlebrown")
-    ax_e.plot(x_world, prof, color="saddlebrown", lw=1.2)
-    ax_e.axhline(0, color="gray", lw=0.5, ls="--")
-    ax_e.set_title(f"Cross-section Relief Profile",
-                   fontsize=10,
-                   fontweight="bold")
-    clean2d(ax_e, keep_spines=True)
+    # Slim colorbar in its own dedicated column (no more full-height bar)
+    cax = fig.add_subplot(gsf[0, 4])
+    cbar = fig.colorbar(sc, cax=cax)
+    cbar.set_label("Displacement", fontsize=8)
+    cbar.ax.tick_params(labelsize=7)
 
-    fig.suptitle("Stage 10: Procedural Fracture Relief Synthesis via FBM",
-                 fontsize=15,
-                 fontweight="bold",
-                 y=0.96)
+    fig.suptitle("(8) Procedural Fracture Relief",
+                 fontsize=15, fontweight="bold", y=0.99)
     save(fig, outdir / "09_fracture_terrain.png")
 
 
@@ -903,7 +866,7 @@ def viz_10_adjacency(fragments, pair_stats, node_by_seed, outdir):
     ax.set_aspect("equal")
     clean2d(ax)
     ax.set_title(
-        f"Stage 12: Topological Adjacency Network\n({len(fragments)} Nodes, {len(seen)} Edges)",
+        f"Topological Adjacency Network\n({len(fragments)} Nodes, {len(seen)} Edges)",
         fontsize=11,
         fontweight="bold")
     save(fig, outdir / "10_adjacency_graph.png")
@@ -918,7 +881,7 @@ def viz_11_final(asm_p, asm_c, exp_p, exp_c, mesh, outdir, view_angles):
         ax1,
         lo,
         hi,
-        "Stage 11: Final Virtual Assembly\n(Distinct Palette Colors & Generated Fills)",
+        "Final Virtual Assembly",
         view_angles=view_angles,
         zoom=ZOOM)
 
@@ -928,7 +891,7 @@ def viz_11_final(asm_p, asm_c, exp_p, exp_c, mesh, outdir, view_angles):
         ax2,
         lo - pad,
         hi + pad,
-        "Stage 11: Exploded Fragmentation View\n(Original Textures & Geometries)",
+        "Exploded Fragmentation View",
         view_angles=view_angles,
         zoom=ZOOM)
 
@@ -1127,6 +1090,7 @@ def main(argv=None):
             continue
         if best_data is None or len(data[4]) > len(best_data[4]):
             best_pair, best_data = pair, data
+
 
     if best_data is not None and len(best_data[4]) >= 2:
         nv, mid, u, v, segs = best_data
